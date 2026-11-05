@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="Echo Cavern — a pitch-black cave you explore with sonar pings. Echoes paint the walls in fading light. Free original HTML5 game.">
+<title>Echo Cavern · Sonar Cave Exploration</title>
+<script>
+// 平台 SDK 按域名条件加载（独立运行时完全不加载，游戏行为不变）
+(function () {
+  var host = location.hostname || "";
+  try {
+    if (host.indexOf("crazygames") !== -1) {
+      var s1 = document.createElement("script");
+      s1.src = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+      s1.onload = function () {
+        if (window.CrazyGames && window.CrazyGames.SDK) {
+          window.CrazyGames.SDK.init().then(function () {
+            try { window.CrazyGames.SDK.game.loadingStart(); } catch (e) {}
+            window.addEventListener("load", function () { try { window.CrazyGames.SDK.game.loadingStop(); } catch (e) {} });
+          }).catch(function () {});
+        }
+      };
+      document.head.appendChild(s1);
+      window.__portal = "crazygames";
+    } else if (host.indexOf("gamedistribution") !== -1 || host.indexOf("html5.gamedistribution.com") !== -1 || host.indexOf("gd.games") !== -1) {
+      var s2 = document.createElement("script");
+      s2.src = "https://sdk.gamedistribution.com/v2/main.min.js";
+      document.head.appendChild(s2);
+      window.__portal = "gamedistribution";
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#000; font-family:-apple-system,"PingFang SC","Segoe UI",sans-serif; }
+  #wrap { height:100%; position:relative; }
+  canvas { display:block; touch-action:none; }
+  #hud { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:10px;
+         padding:8px 12px; padding-top:calc(8px + env(safe-area-inset-top)); z-index:4; pointer-events:none; }
+  .stat { display:flex; align-items:center; gap:6px; }
+  .stat .label { font-size:10px; letter-spacing:1.5px; color:#6fd8e8; font-weight:700; }
+  .meter { width:72px; height:9px; background:rgba(90,140,160,.18); border:1px solid rgba(110,200,230,.35); border-radius:5px; overflow:hidden; }
+  .meter > div { height:100%; width:100%; background:#37c8e8; border-radius:4px; transition:width .08s linear; }
+  #powerFill { background:#3fd0a8; }
+  #powerFill.low { background:#e8544a; }
+  .stat .val { font-size:13px; font-weight:800; color:#cfe8f2; }
+  #btns { margin-left:auto; display:flex; gap:6px; pointer-events:auto; }
+  #btns button { background:rgba(20,40,50,.75); color:#9fdce8; border:1px solid rgba(110,200,230,.4);
+                 border-radius:8px; font-size:11px; font-weight:700; padding:5px 9px; cursor:pointer; letter-spacing:1px; }
+  #btns button:active { transform:scale(.95); }
+  #overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+             background:rgba(0,4,8,.82); z-index:6; }
+  #overlay.hidden { display:none; }
+  .panel { background:#071118; border:1px solid #14333f; border-radius:18px; padding:26px 30px;
+           text-align:center; color:#d8eef5; max-width:min(92vw,430px); max-height:88vh; overflow-y:auto;
+           box-shadow:0 0 40px rgba(40,160,200,.12); }
+  .panel h1 { font-size:30px; letter-spacing:5px; color:#4fd8f0; margin-bottom:2px; text-shadow:0 0 18px rgba(60,200,240,.5); }
+  .panel h2 { font-size:22px; letter-spacing:2px; color:#4fd8f0; margin-bottom:8px; }
+  .tag { font-size:11px; color:#5f8fa0; letter-spacing:2px; margin-bottom:16px; }
+  .help { text-align:left; font-size:12px; line-height:1.65; color:#8fb5c2; background:rgba(30,70,90,.12);
+          border:1px solid rgba(80,170,200,.18); border-radius:10px; padding:10px 12px; margin-bottom:16px; }
+  .help b { color:#cfeef8; }
+  .bigbtn { display:inline-block; background:linear-gradient(135deg,#1e8fb0,#2fd0c8); color:#02141c; border:none;
+            border-radius:12px; padding:12px 38px; font-size:16px; font-weight:800; cursor:pointer;
+            letter-spacing:2px; margin:4px 4px; }
+  .bigbtn:active { transform:scale(.97); }
+  .smallbtn { display:inline-block; background:rgba(30,80,100,.4); color:#9fdce8; border:1px solid rgba(110,200,230,.4);
+              border-radius:10px; padding:10px 20px; font-size:13px; font-weight:700; cursor:pointer; letter-spacing:1px; margin:4px; }
+  #lvGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:6px 0 14px; }
+  #lvGrid button { background:rgba(25,60,75,.5); border:1px solid rgba(90,180,210,.35); color:#bfe8f2;
+                   border-radius:10px; padding:8px 2px; cursor:pointer; font-weight:800; font-size:15px; }
+  #lvGrid button small { display:block; font-size:9px; font-weight:400; color:#5f95a8; margin-top:2px; }
+  #lvGrid button:active { background:rgba(50,140,170,.5); }
+  .rows { font-size:13px; color:#9fc5d2; margin:10px 0 14px; line-height:1.9; }
+  .rows .tot { font-size:22px; font-weight:900; color:#ffd76a; }
+  #footer { position:absolute; bottom:0; left:0; right:0; text-align:center; color:#3a5a66; font-size:10px;
+            padding:5px; letter-spacing:1px; z-index:3; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div class="stat"><span class="label">ECHO</span><div class="meter"><div id="echoFill"></div></div></div>
+    <div class="stat"><span class="label">POWER</span><div class="meter"><div id="powerFill"></div></div></div>
+    <div class="stat"><span class="label">CRYSTALS</span><span class="val" id="cryV">0/3</span></div>
+    <div class="stat"><span class="label">TIME</span><span class="val" id="timeV">0:00</span></div>
+    <div id="btns">
+      <button id="sndBtn">SOUND ON</button>
+      <button id="menuBtn">MENU</button>
+    </div>
+  </div>
+  <div id="overlay">
+    <div class="panel" id="menuPanel">
+      <h1>ECHO CAVERN</h1>
+      <div class="tag">SEE WITH SOUND · 12 CAVERNS</div>
+      <div class="help">
+        The cave is pitch black. <b>Tap / press E</b> to send a sonar ping —
+        walls flash where the echo returns, then fade.<br>
+        <b>Hold</b> to charge a <b>strong ping</b> (wider, longer memory, 3x power).<br>
+        <b>Move</b> with WASD / arrows, or the left-side touch stick.<br>
+        Collect <b>3 crystals</b> (they chime gold from far away) to open the
+        <b>blue exit gate</b>.<br>
+        <b>Stand still to recharge power.</b> Pings wake bats — freeze and they
+        give up. Rivers and pits drag you back to the start.
+      </div>
+      <button class="bigbtn" id="playBtn">PLAY</button>
+    </div>
+    <div class="panel" id="levelsPanel" style="display:none">
+      <h2>SELECT CAVERN</h2>
+      <div id="lvGrid"></div>
+      <button class="smallbtn" id="backBtn">BACK</button>
+    </div>
+    <div class="panel" id="winPanel" style="display:none">
+      <h2 id="winTitle">LEVEL CLEAR</h2>
+      <div class="rows" id="winRows"></div>
+      <button class="bigbtn" id="nextBtn">NEXT</button>
+      <button class="smallbtn" id="replayBtn">REPLAY</button>
+      <button class="smallbtn" id="lvlsBtn">LEVELS</button>
+    </div>
+  </div>
+  <div id="footer">ECHO CAVERN — a free sonar exploration game</div>
+</div>
+<script>
+"use strict";
+// ================= 基础常量 =================
+var TILE = 32, GW = 40, GH = 30, WORLD_W = GW * TILE, WORLD_H = GH * TILE;
+var PLAYER_R = 10, PLAYER_SPD = 92;
+var PING_SPD = 380, PING_CD = 1.2, PING_R = 270, PING_R_STRONG = 430;
+var COST_PING = 2, COST_STRONG = 6, CHARGE_TIME = 0.9;
+var POWER_MAX = 100, POWER_REGEN = 5, BAT_DRAIN = 30;
+var PWR_WALL = [90, 225, 255], PWR_WATER = [70, 175, 255], PWR_PIT = [130, 136, 152],
+    PWR_GATE = [90, 165, 255], PWR_CRYS = [255, 208, 90], PWR_BAT = [255, 84, 100],
+    PWR_ROCK = [150, 210, 235], PWR_CHECK = [200, 220, 235];
+
+var LEVEL_NAMES = ["First Echo","The Fork","Pillar Hall","Dead Water","River Bend","The Roost",
+                   "The Pit","Echo Maze","Bat Caverns","Sunken Gallery","The Long Dark","Heart of the Cavern"];
+var LEVEL_MAPS = [
+  // 1 First Echo
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "###.....################################",
+  "###.......S..........###################",
+  "###..P.......C.......###################",
+  "###..................###################",
+  "###.....########.....###################",
+  "################..C..###################",
+  "################.....##########......###",
+  "################.....##########..S...###",
+  "################........S.........E..###",
+  "################..........C..........###",
+  "################.....................###",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  ],
+  // 2 The Fork
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "############################.........###",
+  "#############........................###",
+  "#############......C....S.....S..E...###",
+  "#############........................###",
+  "#############...############.........###",
+  "#############.S.########################",
+  "#############...########################",
+  "#####.....###...########################",
+  "#####.....###...########################",
+  "#####..C........########################",
+  "#####......................#############",
+  "#####.....###....S..C......#############",
+  "#############..............#############",
+  "#############...########################",
+  "#############...########################",
+  "#############...########################",
+  "#############...########################",
+  "#############...########################",
+  "#############...########################",
+  "####.....####...########################",
+  "####..S.........########################",
+  "####..P.........########################",
+  "####....S.......########################",
+  "####.....###############################",
+  "########################################",
+  "########################################",
+  "########################################",
+  ],
+  // 3 Pillar Hall
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "##################################....##",
+  "##########.........................E..##",
+  "##########.........S..................##",
+  "##########............................##",
+  "##########..CS...S...S...S...S........##",
+  "##########......................C..#####",
+  "##########.........................#####",
+  "##########.........................#####",
+  "##########...S.S.S...S...S...S.....#####",
+  "##########.........................#####",
+  "##########.........................#####",
+  "##########............C............#####",
+  "##########...S...S...S...S...S.....#####",
+  "##########.........................#####",
+  "##########.................S.......#####",
+  "##########.........................#####",
+  "##########.........................#####",
+  "#####..............................#####",
+  "#####..............................#####",
+  "###.....################################",
+  "###.....################################",
+  "###..P..################################",
+  "###.....################################",
+  "###.....################################",
+  "########################################",
+  "########################################",
+  ],
+  // 4 Dead Water
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "#####################.....##############",
+  "#####################S....RR############",
+  "#####################.....RR############",
+  "################RR###...##RR############",
+  "################RR###...##RR############",
+  "################RR###...##RR############",
+  "################RR###...##RR############",
+  "###.....########RR###...##RR#####.....##",
+  "###.......S...............RR......S...##",
+  "###..P.....C..........CS......C....E..##",
+  "###.............RR....................##",
+  "###.....########RR########RR#####.....##",
+  "################RR########RR############",
+  "################RR########RR############",
+  "################RR########RR############",
+  "################RR########RR############",
+  "################RR######################",
+  "################RR######################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  ],
+  // 5 River Bend
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "####.....#####################.....#####",
+  "####...............................#####",
+  "####..P...........S.............C..#####",
+  "####...............................#####",
+  "####.....#####################.....#####",
+  "##############################..########",
+  "########RRRRRRRRRRRRRRRRRRRRRR..RRR#####",
+  "########RRRRRRRRRRRRRRRRRRRRRR..RRR#####",
+  "############..C..S.......S......########",
+  "############...................S########",
+  "############...#######RR################",
+  "############...#######RR################",
+  "############...#######RR################",
+  "############...#######RR################",
+  "############..S#######RR################",
+  "############..................S...######",
+  "############..............C.......######",
+  "######################RR#####.....######",
+  "######################RR#####.....######",
+  "######################RR#####.....######",
+  "######################RR#####..E..######",
+  "######################RR#####.....######",
+  "######################RR#####.....######",
+  "########################################",
+  "########################################",
+  "########################################",
+  ],
+  // 6 The Roost
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "######################.....##.......####",
+  "#################............S......####",
+  "#################.......B..C.....E..####",
+  "#################..S................####",
+  "################.....#.....##.......####",
+  "################..B..###################",
+  "################..C..###################",
+  "################.....###################",
+  "##########.....#.....###################",
+  "#####...............####################",
+  "#####......CB..S....####################",
+  "#####.S.............####################",
+  "#####...##.....#########################",
+  "#####...################################",
+  "#####...################################",
+  "#####...################################",
+  "#####...################################",
+  "####.....###############################",
+  "####.....###############################",
+  "####..P..###############################",
+  "####.....###############################",
+  "####.....###############################",
+  "########################################",
+  "########################################",
+  ],
+  // 7 The Pit
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "##########.......#######################",
+  "##########.......VVVVVVVVVVVVVVVVV######",
+  "##########..E....VVVVVVVVVVVVVVVVV######",
+  "##########.......VVVVVVVVVVVVVVVVV######",
+  "##########..........C..........VVV######",
+  "##########VVVV.................VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV.CVVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "##########VVVVVVVVVVVVVVVVVVV..VVV######",
+  "#####..........................VVV######",
+  "#####...........C..............VVV######",
+  "#####........VVVVVVVVVVVVVVVVVVVVV######",
+  "#####...##VVVVVVVVVVVVVVVVVVVVVVVV######",
+  "####.....###############################",
+  "####.....###############################",
+  "####..P..###############################",
+  "####.....###############################",
+  "####.....###############################",
+  "########################################",
+  "########################################",
+  ],
+  // 8 Echo Maze
+  [
+  "########################################",
+  "########################################",
+  "##......################################",
+  "##......################################",
+  "##..P..............................#####",
+  "##.................................#####",
+  "##........#########..############S.#####",
+  "##........#########..############..#####",
+  "####..##..#########C.############..#####",
+  "####..##..#########..############..#####",
+  "####..#############..############..#####",
+  "####..###########################..#####",
+  "####..C.........#################..#####",
+  "####............#################..#####",
+  "##############..####.....####..#########",
+  "##############..####.....####..#########",
+  "##############S.#############..#########",
+  "##############..#############..#########",
+  "##############..#############..#########",
+  "##############..#############.S#########",
+  "######.......#..............#..#########",
+  "######.......#..............############",
+  "##########################..############",
+  "##########################C.############",
+  "##########################..#####.....##",
+  "##########################.S#####.....##",
+  "##########################.........E..##",
+  "##########################............##",
+  "#################################.....##",
+  "########################################",
+  ],
+  // 9 Bat Caverns
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "#################################.....##",
+  "######.............................E..##",
+  "######...............SS...............##",
+  "######....SS..........................##",
+  "######....S.................S.........##",
+  "######.............................#####",
+  "######.............C.......B.......#####",
+  "######......B......................#####",
+  "######.............................#####",
+  "######..........SS.................#####",
+  "######..........S.........C........#####",
+  "######...........................S.#####",
+  "######...........................S.#####",
+  "######..................SS.........#####",
+  "######..SS..............S..........#####",
+  "######.............................#####",
+  "######......B......C...............#####",
+  "######........S............B..SS...#####",
+  "####..........SS..............S....#####",
+  "####...............................#####",
+  "####...............................#####",
+  "###.....################################",
+  "###..P..################################",
+  "###.....################################",
+  "###.....################################",
+  "########################################",
+  ],
+  // 10 Sunken Gallery
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "####.....###############RR##############",
+  "####............................########",
+  "####..P...S...VVVV....S.......C.########",
+  "####..........VVVV..............########",
+  "####.....###############RR###..#########",
+  "########################RR###..#########",
+  "########################RR###..#########",
+  "########################RR###..#########",
+  "########################RR###..#########",
+  "########################RR###..#########",
+  "###########....................#########",
+  "###########..C...SVV........S..#########",
+  "###########....................#########",
+  "###########...##########RR##############",
+  "###########...##########RR##############",
+  "###########...##########RR##############",
+  "###########...##########RR##############",
+  "###########...##########RR##############",
+  "###########.................############",
+  "###########.......VVVVS.C...#S##########",
+  "###########.......VVVV......############",
+  "########################RR.......#######",
+  "########################RR.......#######",
+  "########################RR....E..#######",
+  "########################RR.......#######",
+  "########################RR.......#######",
+  "########################################",
+  ],
+  // 11 The Long Dark
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "###.....################################",
+  "###...............................######",
+  "###..P........S...C.......S.......######",
+  "###................................#####",
+  "###.....########################...#####",
+  "################################...#####",
+  "################################.S.#####",
+  "################################...#####",
+  "################################...#####",
+  "################################...#####",
+  "########............VVVV...........#####",
+  "########....B...S...........C....S.#####",
+  "########............VVVV...........#####",
+  "########...#############################",
+  "########...#############################",
+  "########...#############################",
+  "########...#############################",
+  "########.S.#############################",
+  "########...######################.....##",
+  "########...######################.....##",
+  "########..............................##",
+  "########......S.......C.....B..S...E..##",
+  "########..............................##",
+  "#################################.....##",
+  "########################################",
+  "########################################",
+  "########################################",
+  ],
+  // 12 Heart of the Cavern
+  [
+  "########################################",
+  "########################################",
+  "########################################",
+  "########################################",
+  "############............VVVV......######",
+  "############..................C...######",
+  "############............VVVV........####",
+  "############..RR#################...####",
+  "############..RR#################.....##",
+  "############..RR#################.....##",
+  "############..RR#################..E..##",
+  "##########.....................##.....##",
+  "##########..C....B.............##.....##",
+  "##########.....................##.....##",
+  "##############RR####...#################",
+  "##############RR####...#################",
+  "##############RR####VV.#################",
+  "##############RR####VV.#################",
+  "##############RR####...#################",
+  "##############RR...............#########",
+  "##############RR...............#########",
+  "##############RR...S...S..BS...#########",
+  "##############RR...............#########",
+  "###.....######RR.....B.........#########",
+  "###............................#########",
+  "###..P.............S...S...SC..#########",
+  "###............................#########",
+  "###.....######RR...............#########",
+  "##############RR########################",
+  "########################################",
+  ],
+];
+
+// ================= 存取工具 =================
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+// ================= 画布 =================
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
+var cw = 0, ch = 0;
+function resize() {
+  cw = window.innerWidth; ch = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
+  canvas.style.width = cw + "px"; canvas.style.height = ch + "px";
+}
+window.addEventListener("resize", resize);
+resize();
+var isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+
+// ================= 音频（WebAudio 合成） =================
+var actx = null, master = null, riverGain = null, muted = lsGet("ec_muted") === "1";
+function audioInit() {
+  if (actx) { if (actx.state === "suspended") { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    actx = new AC();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 1;
+    master.connect(actx.destination);
+    // 地下水声：循环噪声 + 低通
+    var len = Math.floor(actx.sampleRate * 0.6);
+    var buf = actx.createBuffer(1, len, actx.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.55;
+    var src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+    var lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 380;
+    riverGain = actx.createGain(); riverGain.gain.value = 0;
+    src.connect(lp); lp.connect(riverGain); riverGain.connect(master);
+    src.start();
+  } catch (e) { actx = null; }
+}
+function tone(freq, dur, type, vol, when, slideTo) {
+  if (!actx || !master) return;
+  try {
+    var t0 = actx.currentTime + (when || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || "sine"; o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  } catch (e) {}
+}
+function sPing(strong, echoDists, R) {
+  if (strong) { tone(620, 0.42, "sine", 0.2, 0, 180); tone(1240, 0.2, "sine", 0.08); }
+  else tone(920, 0.3, "sine", 0.15, 0, 300);
+  // 延迟回波：按墙距离安排返回声（近的先回，营造深度）
+  for (var i = 0; i < echoDists.length; i++) {
+    var dd = echoDists[i];
+    var when = Math.min(1.5, 2 * dd / PING_SPD);
+    tone(300 + 90 / (1 + dd / 200), 0.07, "sine", 0.06 * Math.max(0.15, 1 - dd / R), when);
+  }
+}
+function sChorus(dist, strong) {
+  var when = Math.min(1.8, dist / PING_SPD), v = 0.09 * Math.max(0.25, 1 - dist / 900) * (strong ? 1.4 : 1);
+  var base = strong ? 1.0 : 1.0;
+  tone(523.25 * base, 0.5, "sine", v, when);
+  tone(659.25 * base, 0.5, "sine", v * 0.8, when + 0.06);
+  tone(783.99 * base, 0.6, "sine", v * 0.6, when + 0.12);
+}
+function sScreech(vol) { tone(1500, 0.16, "sawtooth", vol || 0.07, 0, 480); }
+function sPickup() { tone(660, 0.12, "triangle", 0.13); tone(880, 0.2, "triangle", 0.12, 0.09); tone(1318, 0.3, "sine", 0.08, 0.18); }
+function sGateOpen() { tone(392, 0.3, "triangle", 0.12); tone(523.25, 0.3, "triangle", 0.12, 0.12); tone(659.25, 0.3, "triangle", 0.12, 0.24); tone(783.99, 0.55, "triangle", 0.14, 0.36); }
+function sWin() { var n = [523.25, 659.25, 783.99, 1046.5]; for (var i = 0; i < n.length; i++) tone(n[i], 0.4, "triangle", 0.12, i * 0.13); }
+function sFall(kind) { if (kind === "water") tone(500, 0.45, "sine", 0.14, 0, 90); else tone(340, 0.5, "sine", 0.14, 0, 60); }
+function sDeny() { tone(180, 0.08, "square", 0.06); }
+function sLow() { tone(880, 0.08, "square", 0.05); tone(880, 0.08, "square", 0.05, 0.16); }
+function sUi() { tone(520, 0.06, "square", 0.05); }
+function applyMute() { if (master) master.gain.value = muted ? 0 : 1; document.getElementById("sndBtn").textContent = muted ? "SOUND OFF" : "SOUND ON"; }
+
+// ================= 地图/几何（纯逻辑，可单测） =================
+var curMap = null;   // 30 行字符串
+function cellCh(tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= GW || ty >= GH) return "#";
+  return curMap[ty].charAt(tx);
+}
+function isSolidCh(c) { return c === "#" || c === "S"; }
+function isSolidCell(tx, ty) { return isSolidCellCh(cellCh(tx, ty)); }
+function isSolidCellCh(c) { return c === "#" || c === "S"; }
+function isHazCh(c) { return c === "R" || c === "V"; }
+function losClear(x0, y0, x1, y1) {
+  var dx = x1 - x0, dy = y1 - y0;
+  var dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.001) return true;
+  var d = rayDist(x0, y0, Math.atan2(dy, dx), dist);
+  return d >= dist - 0.6;
+}
+function rayDist(x, y, ang, maxD) {
+  var dx = Math.cos(ang), dy = Math.sin(ang);
+  var tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+  var stepX = dx > 0 ? 1 : -1, stepY = dy > 0 ? 1 : -1;
+  var adx = Math.abs(dx), ady = Math.abs(dy);
+  var tMaxX = adx > 1e-9 ? ((dx > 0 ? (tx + 1) * TILE - x : x - tx * TILE) / adx) : 1e9;
+  var tMaxY = ady > 1e-9 ? ((dy > 0 ? (ty + 1) * TILE - y : y - ty * TILE) / ady) : 1e9;
+  var tDX = adx > 1e-9 ? TILE / adx : 1e9, tDY = ady > 1e-9 ? TILE / ady : 1e9;
+  for (var i = 0; i < 160; i++) {
+    var d;
+    if (tMaxX < tMaxY) { d = tMaxX; tMaxX += tDX; tx += stepX; }
+    else { d = tMaxY; tMaxY += tDY; ty += stepY; }
+    if (d > maxD) return maxD;
+    if (isSolidCell(tx, ty)) return d;
+  }
+  return maxD;
+}
+// AABB 滑动碰撞（分轴解算，r 为半宽）
+function slideMove(px, py, dx, dy, r) {
+  var nx = px + dx;
+  if (dx !== 0) {
+    var tex = dx > 0 ? Math.floor((nx + r) / TILE) : Math.floor((nx - r) / TILE);
+    var ty0 = Math.floor((py - r + 0.001) / TILE), ty1 = Math.floor((py + r - 0.001) / TILE);
+    for (var ty = ty0; ty <= ty1; ty++) {
+      if (isSolidCell(tex, ty)) {
+        if (dx > 0) nx = Math.min(nx, tex * TILE - r - 0.01);
+        else nx = Math.max(nx, (tex + 1) * TILE + r + 0.01);
+      }
+    }
+  }
+  var ny = py + dy;
+  if (dy !== 0) {
+    var tey = dy > 0 ? Math.floor((ny + r) / TILE) : Math.floor((ny - r) / TILE);
+    var tx0 = Math.floor((nx - r + 0.001) / TILE), tx1 = Math.floor((nx + r - 0.001) / TILE);
+    for (var tx = tx0; tx <= tx1; tx++) {
+      if (isSolidCell(tx, tey)) {
+        if (dy > 0) ny = Math.min(ny, tey * TILE - r - 0.01);
+        else ny = Math.max(ny, (tey + 1) * TILE + r + 0.01);
+      }
+    }
+  }
+  return [nx, ny];
+}
+
+// ================= 游戏状态 =================
+var state = "menu";           // menu | levels | play | win
+var level = 1;
+var player = { x: 0, y: 0 };
+var checkpoint = { x: 0, y: 0 };
+var power = POWER_MAX, crystalsGot = 0, gateOpen = false, gateSeen = false;
+var playTime = 0, fallCount = 0, lastScore = 0, invuln = 0;
+var cooldown = 0, pingHeld = false, chargeT = 0, chargeDenied = false;
+var pingId = 1;
+var pings = [];               // {x,y,r,R,speed,strong,pending:[],pi,chorus:[],lastBat:0}
+var echoSegs = [];            // {x1,y1,x2,y2,life,max,a,r,g,b}
+var crystalPulses = [];       // {x,y,t,life,max,strong}
+var crystals = [];            // {x,y,got}
+var bats = [];                // {x,y,hx,hy,state,t,ph,wt,st,ft}
+var waterCells = [];
+var gatePos = { x: 0, y: 0 };
+var inX = 0, inY = 0, calmT = 0, lowT = 0;
+var respawnT = 0, respawnKind = "";
+var cam = { x: 0, y: 0, s: 1 };
+var joy = { active: false, id: -1, bx: 0, by: 0, kx: 0, ky: 0 };
+var pingTouchId = -1;
+var keys = {};
+
+// ================= 关卡装载 =================
+function startLevel(n) {
+  level = Math.max(1, Math.min(12, n));
+  curMap = LEVEL_MAPS[level - 1];
+  crystals = []; bats = []; waterCells = [];
+  echoSegs = []; pings = []; crystalPulses = [];
+  gateOpen = false; gateSeen = false; crystalsGot = 0;
+  power = POWER_MAX; playTime = 0; fallCount = 0; invuln = 0;
+  cooldown = 0; pingHeld = false; chargeT = 0; calmT = 0; lowT = 0; respawnT = 0;
+  for (var y = 0; y < GH; y++) for (var x = 0; x < GW; x++) {
+    var c = cellCh(x, y), cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE;
+    if (c === "P") { checkpoint.x = player.x = cx; checkpoint.y = player.y = cy; }
+    else if (c === "C") crystals.push({ x: cx, y: cy, got: false });
+    else if (c === "B") bats.push({ x: cx, y: cy, hx: cx, hy: cy, state: "roost", t: 0, ph: Math.random() * 6.28, wt: Math.random() * 6, st: 0, ft: 0 });
+    else if (c === "R") waterCells.push({ x: cx, y: cy });
+    else if (c === "E") gatePos = { x: cx, y: cy };
+  }
+  cam.x = player.x; cam.y = player.y;
+  revealAround(player.x, player.y, 84, 1.8, 0.5);   // 出生点微光，先看到身边墙
+  state = "play";
+  showPanel(null);
+  cgEvent("start");
+}
+
+// ---- 回波显形计算：把 ping 半径内所有可反射面预算好，波前到达时激活 ----
+function computeReveals(px, py, R, strong, list) {
+  var life = strong ? 3.0 : 1.6;
+  var tx0 = Math.max(0, Math.floor((px - R) / TILE)), tx1 = Math.min(GW - 1, Math.floor((px + R) / TILE));
+  var ty0 = Math.max(0, Math.floor((py - R) / TILE)), ty1 = Math.min(GH - 1, Math.floor((py + R) / TILE));
+  for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++) {
+    var c = cellCh(tx, ty);
+    var x0 = tx * TILE, y0 = ty * TILE, x1 = x0 + TILE, y1 = y0 + TILE;
+    var cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+    if (c === "#") {
+      // 墙：暴露的棱边显形（逐面视线检查）
+      addFace(list, px, py, R, tx, ty, 0, -1, x0, y0, x1, y0, life, PWR_WALL, strong ? 1 : 0.9);
+      addFace(list, px, py, R, tx, ty, 0, 1, x0, y1, x1, y1, life, PWR_WALL, strong ? 1 : 0.9);
+      addFace(list, px, py, R, tx, ty, -1, 0, x0, y0, x0, y1, life, PWR_WALL, strong ? 1 : 0.9);
+      addFace(list, px, py, R, tx, ty, 1, 0, x1, y0, x1, y1, life, PWR_WALL, strong ? 1 : 0.9);
+    } else if (c === "S") {
+      // 石笋：菱形轮廓
+      if (!losClear(px, py, cx, cy)) continue;
+      var d = Math.hypot(cx - px, cy - py);
+      if (d > R) continue;
+      var m = TILE * 0.42;
+      var pts = [[cx, cy - m], [cx + m, cy], [cx, cy + m], [cx - m, cy]];
+      for (var k = 0; k < 4; k++) {
+        var a = pts[k], b = pts[(k + 1) % 4];
+        list.push({ d: d, x1: a[0], y1: a[1], x2: b[0], y2: b[1], life: life, max: life, a: 0.95, r: PWR_ROCK[0], g: PWR_ROCK[1], b: PWR_ROCK[2] });
+      }
+    } else if (c === "R") {
+      addHazRim(list, px, py, R, tx, ty, ".", life * 0.9, PWR_WATER, 0.45);
+    } else if (c === "V") {
+      addHazRim(list, px, py, R, tx, ty, ".", life * 0.7, PWR_PIT, 0.2);   // 深坑回波很弱
+    } else if (c === "E") {
+      var dg = Math.hypot(cx - px, cy - py);
+      if (dg > R) continue;
+      if (!losClear(px, py, cx, cy)) continue;
+      gateSeen = true;
+      var rim = [[x0 + 4, y0, x1 - 4, y0], [x0 + 4, y1, x1 - 4, y1], [x0, y0 + 4, x0, y1 - 4], [x1, y0 + 4, x1, y1 - 4]];
+      for (var g = 0; g < 4; g++) list.push({ d: dg, x1: rim[g][0], y1: rim[g][1], x2: rim[g][2], y2: rim[g][3], life: 2.6, max: 2.6, a: 0.9, r: PWR_GATE[0], g: PWR_GATE[1], b: PWR_GATE[2] });
+    } else if (c === "P") {
+      var dp = Math.hypot(cx - px, cy - py);
+      if (dp > R) continue;
+      if (!losClear(px, py, cx, cy)) continue;
+      var inset = 7;
+      var ck = [[x0 + inset, y0 + inset, x1 - inset, y0 + inset], [x0 + inset, y1 - inset, x1 - inset, y1 - inset], [x0 + inset, y0 + inset, x0 + inset, y1 - inset], [x1 - inset, y0 + inset, x1 - inset, y1 - inset]];
+      for (var p = 0; p < 4; p++) list.push({ d: dp, x1: ck[p][0], y1: ck[p][1], x2: ck[p][2], y2: ck[p][3], life: 1.8, max: 1.8, a: 0.3, r: PWR_CHECK[0], g: PWR_CHECK[1], b: PWR_CHECK[2] });
+    }
+  }
+}
+function addFace(list, px, py, R, tx, ty, dx, dy, ex1, ey1, ex2, ey2, life, col, a) {
+  // 与相邻可通行格的共享棱边
+  var nb = cellCh(tx + dx, ty + dy);
+  if (isSolidCh(nb)) return;
+  var mx = (ex1 + ex2) / 2, my = (ey1 + ey2) / 2;
+  var d = Math.hypot(mx - px, my - py);
+  if (d > R) return;
+  if (!losClear(px, py, mx, my)) return;
+  list.push({ d: d, x1: ex1, y1: ey1, x2: ex2, y2: ey2, life: life, max: life, a: a, r: col[0], g: col[1], b: col[2] });
+}
+function addHazRim(list, px, py, R, tx, ty, openCh, life, col, a) {
+  var x0 = tx * TILE, y0 = ty * TILE, x1 = x0 + TILE, y1 = y0 + TILE;
+  var cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+  var d = Math.hypot(cx - px, cy - py);
+  if (d > R) return;
+  var dirs = [[0, -1, x0, y0, x1, y0], [0, 1, x0, y1, x1, y1], [-1, 0, x0, y0, x0, y1], [1, 0, x1, y0, x1, y1]];
+  for (var i = 0; i < 4; i++) {
+    var dd = dirs[i];
+    if (cellCh(tx + dd[0], ty + dd[1]) !== openCh) continue;
+    var mx = (dd[2] + dd[4]) / 2, my = (dd[3] + dd[5]) / 2;
+    if (!losClear(px, py, mx, my)) continue;
+    list.push({ d: d, x1: dd[2], y1: dd[3], x2: dd[4], y2: dd[5], life: life, max: life, a: a, r: col[0], g: col[1], b: col[2] });
+  }
+}
+// 无声版微光显形（出生点）
+function revealAround(px, py, R, life, a) {
+  var list = [];
+  computeReveals(px, py, R, false, list);
+  for (var i = 0; i < list.length; i++) {
+    list[i].life = life; list[i].max = life; list[i].a *= a;
+    echoSegs.push(list[i]);
+  }
+}
+
+// ---- 发射 ping ----
+function tryFire(strong) {
+  if (state !== "play" || respawnT > 0) return false;
+  if (cooldown > 0) { if (!strong) sDeny(); return false; }
+  var cost = strong ? COST_STRONG : COST_PING;
+  if (power < cost) { sDeny(); return false; }
+  power -= cost;
+  cooldown = PING_CD;
+  var R = strong ? PING_R_STRONG : PING_R;
+  var pending = [];
+  computeReveals(player.x, player.y, R, strong, pending);
+  pending.sort(function (a, b) { return a.d - b.d; });
+  // 水晶合唱：超出半径也响应（金色方向路标）
+  var chorus = [];
+  for (var i = 0; i < crystals.length; i++) {
+    var cr = crystals[i];
+    if (cr.got) continue;
+    var d = Math.hypot(cr.x - player.x, cr.y - player.y);
+    if (d <= Math.max(R * 1.8, R + 160)) {
+      chorus.push({ x: cr.x, y: cr.y, t: -d / PING_SPD, life: strong ? 4.5 : 3.2, max: strong ? 4.5 : 3.2, strong: strong });
+      sChorus(d, strong);
+    }
+  }
+  pings.push({ id: pingId++, x: player.x, y: player.y, r: 0, R: R, speed: PING_SPD, strong: strong, pending: pending, pi: 0, chorus: chorus });
+  // 音效：直达声 + 依墙距延迟的回波
+  var probe = [];
+  for (var a = 0; a < 5; a++) probe.push(rayDist(player.x, player.y, a * Math.PI * 2 / 5 + 0.3, R));
+  probe.sort(function (x, y) { return x - y; });
+  var ed = probe.slice(0, 3);
+  sPing(strong, ed, R);
+  return true;
+}
+function pressPing() {
+  if (state !== "play") return;
+  if (pingHeld) return;
+  pingHeld = true; chargeT = 0; chargeDenied = false;
+  tryFire(false);
+}
+function releasePing() { pingHeld = false; chargeT = 0; }
+
+// ---- 掉落/溺水回检查点 ----
+function fall(kind) {
+  fallCount++;
+  respawnT = 0.85; respawnKind = kind;
+  sFall(kind);
+  pings = []; crystalPulses = [];
+}
+function doRespawn() {
+  player.x = checkpoint.x; player.y = checkpoint.y;
+  inX = inY = 0; calmT = 0;
+  revealAround(player.x, player.y, 84, 1.8, 0.5);
+}
+
+// ---- 蝙蝠 AI：roost(栖) → chase(惊动追击) → flee(散去) ----
+function alertBatsInRange(x, y, R) {
+  for (var i = 0; i < bats.length; i++) {
+    var b = bats[i];
+    if (b.state !== "roost") continue;
+    var d = Math.hypot(b.x - x, b.y - y);
+    if (d <= R) {
+      b.state = "chase"; b.t = 0; b.st = 0.5;
+      batEcho(b);
+    }
+  }
+}
+function batEcho(b) {
+  var m = 9;
+  var pts = [[b.x, b.y - m], [b.x + m, b.y], [b.x, b.y + m], [b.x - m, b.y]];
+  for (var k = 0; k < 4; k++) {
+    echoSegs.push({ x1: pts[k][0], y1: pts[k][1], x2: pts[(k + 1) % 4][0], y2: pts[(k + 1) % 4][1], life: 2.2, max: 2.2, a: 0.7, r: PWR_BAT[0], g: PWR_BAT[1], b: PWR_BAT[2] });
+  }
+}
+function updateBats(dt) {
+  var idle = Math.hypot(inX, inY) < 0.05 && !pingHeld;
+  calmT = idle ? calmT + dt : 0;
+  for (var i = 0; i < bats.length; i++) {
+    var b = bats[i];
+    var dx = player.x - b.x, dy = player.y - b.y;
+    var d = Math.hypot(dx, dy);
+    if (b.state === "roost") {
+      b.wt += dt;
+      var hx = b.hx + Math.cos(b.wt * 0.8 + b.ph) * 9, hy = b.hy + Math.sin(b.wt * 1.1 + b.ph) * 9;
+      b.x += (hx - b.x) * Math.min(1, dt * 2.5);
+      b.y += (hy - b.y) * Math.min(1, dt * 2.5);
+    } else if (b.state === "chase") {
+      b.t += dt;
+      // 玩家静止 1.3 秒 → 蝙蝠散去（潜行）；离得太远也会放弃
+      if (calmT > 1.3 && d > 60) { b.state = "flee"; b.ft = 6; continue; }
+      if (d > 520) { b.state = "flee"; b.ft = 6; continue; }
+      var ang = Math.atan2(dy, dx) + Math.sin(b.t * 7 + b.ph) * 0.5;
+      var np = slideMove(b.x, b.y, Math.cos(ang) * 95 * dt, Math.sin(ang) * 95 * dt, 6);
+      b.x = np[0]; b.y = np[1];
+      b.st -= dt;
+      if (b.st <= 0) { sScreech(0.05); b.st = 0.7 + Math.random() * 0.6; }
+      if (d < 22 && invuln <= 0 && respawnT <= 0) {
+        power = Math.max(0, power - BAT_DRAIN);
+        invuln = 1.5;
+        b.state = "flee"; b.ft = 6;
+        sScreech(0.12);
+        tone(140, 0.25, "square", 0.1);
+      }
+    } else if (b.state === "flee") {
+      b.ft -= dt;
+      var hx2 = b.hx - b.x, hy2 = b.hy - b.y;
+      var dh = Math.hypot(hx2, hy2);
+      if (dh < 14 || b.ft <= 0) { b.state = "roost"; b.wt = Math.random() * 6; continue; }
+      var np2 = slideMove(b.x, b.y, hx2 / dh * 80 * dt, hy2 / dh * 80 * dt, 6);
+      b.x = np2[0]; b.y = np2[1];
+    }
+  }
+}
+
+// ================= 主更新 =================
+function update(dt) {
+  if (state !== "play") return;
+  playTime += dt;
+  if (invuln > 0) invuln -= dt;
+  if (cooldown > 0) cooldown -= dt;
+
+  // 重生过渡
+  if (respawnT > 0) {
+    var was = respawnT;
+    respawnT -= dt;
+    if (was > 0.42 && respawnT <= 0.42) doRespawn();
+    if (respawnT < 0) respawnT = 0;
+  } else {
+    // 移动
+    var ix = inX, iy = inY;
+    var keysX = (keys.ArrowRight || keys.d || keys.D ? 1 : 0) - (keys.ArrowLeft || keys.a || keys.A ? 1 : 0);
+    var keysY = (keys.ArrowDown || keys.s || keys.S ? 1 : 0) - (keys.ArrowUp || keys.w || keys.W ? 1 : 0);
+    if (keysX !== 0 || keysY !== 0) { ix = keysX; iy = keysY; }
+    var mag = Math.hypot(ix, iy);
+    if (mag > 1) { ix /= mag; iy /= mag; mag = 1; }
+    if (mag > 0.01) {
+      var np = slideMove(player.x, player.y, ix * PLAYER_SPD * dt, iy * PLAYER_SPD * dt, PLAYER_R);
+      player.x = np[0]; player.y = np[1];
+    }
+    // 静止回电
+    if (mag < 0.05 && !pingHeld) power = Math.min(POWER_MAX, power + POWER_REGEN * dt);
+    // 蓄力强 ping：按住充满且冷却好 → 自动释放
+    if (pingHeld) {
+      chargeT += dt;
+      if (chargeT >= CHARGE_TIME) {
+        if (cooldown <= 0) {
+          if (power >= COST_STRONG) { tryFire(true); pingHeld = false; chargeT = 0; }
+          else if (!chargeDenied) { sDeny(); chargeDenied = true; pingHeld = false; chargeT = 0; }
+        }
+      }
+    }
+    // 危险格（中心进入才判落）
+    var tc = cellCh(Math.floor(player.x / TILE), Math.floor(player.y / TILE));
+    if (tc === "R") fall("water");
+    else if (tc === "V") fall("pit");
+    // 水晶拾取
+    for (var i = 0; i < crystals.length; i++) {
+      var cr = crystals[i];
+      if (cr.got) continue;
+      if (Math.hypot(cr.x - player.x, cr.y - player.y) < 22) {
+        cr.got = true; crystalsGot++;
+        sPickup();
+        if (crystalsGot >= 3 && !gateOpen) { gateOpen = true; sGateOpen(); }
+      }
+    }
+    // 出口
+    if (gateOpen && Math.hypot(gatePos.x - player.x, gatePos.y - player.y) < 26) doWin();
+  }
+
+  // ping 波前推进
+  for (var p = pings.length - 1; p >= 0; p--) {
+    var pg = pings[p];
+    pg.r += pg.speed * dt;
+    while (pg.pi < pg.pending.length && pg.pending[pg.pi].d <= pg.r) {
+      var seg = pg.pending[pg.pi++];
+      echoSegs.push(seg);
+      if (echoSegs.length > 620) echoSegs.splice(0, echoSegs.length - 620);
+    }
+    alertBatsInRange(pg.x, pg.y, Math.min(pg.r, pg.R));
+    if (pg.r >= pg.R) pings.splice(p, 1);
+  }
+  // 残影淡出
+  for (var e = echoSegs.length - 1; e >= 0; e--) {
+    echoSegs[e].life -= dt;
+    if (echoSegs[e].life <= 0) echoSegs.splice(e, 1);
+  }
+  // 水晶合唱脉冲
+  for (var c2 = crystalPulses.length - 1; c2 >= 0; c2--) {
+    var cp = crystalPulses[c2];
+    cp.t += dt;
+    if (cp.t > 0) { cp.life -= dt; if (cp.life <= 0) crystalPulses.splice(c2, 1); }
+  }
+  for (var pg2 = pings.length - 1; pg2 >= 0; pg2--) {
+    var ch2 = pings[pg2].chorus;
+    for (var c3 = ch2.length - 1; c3 >= 0; c3--) {
+      ch2[c3].t += dt;
+      if (ch2[c3].t >= 0) { crystalPulses.push(ch2[c3]); ch2.splice(c3, 1); }
+    }
+  }
+
+  updateBats(dt);
+
+  // 相机
+  var scale = Math.max(0.75, Math.min(2.0, Math.min(cw, ch) / (13.5 * TILE)));
+  cam.s = scale;
+  var vw = cw / scale, vh = ch / scale;
+  var tx = WORLD_W <= vw ? (WORLD_W - vw) / 2 : Math.max(0, Math.min(WORLD_W - vw, player.x - vw / 2));
+  var ty = WORLD_H <= vh ? (WORLD_H - vh) / 2 : Math.max(0, Math.min(WORLD_H - vh, player.y - vh / 2));
+  var cl = Math.min(1, dt * 7);
+  cam.x += (tx - cam.x) * cl; cam.y += (ty - cam.y) * cl;
+
+  // 环境音：河流渐强 + 低电警告
+  if (riverGain) {
+    var wd = 1e9;
+    for (var w = 0; w < waterCells.length; w++) {
+      var wc = waterCells[w];
+      var dd = Math.hypot(wc.x - player.x, wc.y - player.y);
+      if (dd < wd) wd = dd;
+    }
+    var g = wd < 340 ? (1 - wd / 340) * 0.22 : 0;
+    riverGain.gain.value += (g - riverGain.gain.value) * Math.min(1, dt * 4);
+  }
+  lowT -= dt;
+  if (power < 20 && power > 0 && lowT <= 0) { sLow(); lowT = 2.4; }
+
+  updateHud();
+}
+
+// ---- 过关 ----
+function doWin() {
+  if (state !== "play") return;
+  state = "win";
+  lastScore = Math.max(0, Math.round(power * 10 + crystalsGot * 100 - playTime * 2));
+  var bk = "ec_best_" + level;
+  var prev = parseInt(lsGet(bk) || "0", 10) || 0;
+  if (lastScore > prev) lsSet(bk, String(lastScore));
+  document.getElementById("winTitle").textContent = "LEVEL " + level + " CLEAR";
+  var mm = Math.floor(playTime / 60), ss = Math.floor(playTime % 60);
+  var best = parseInt(lsGet(bk) || "0", 10) || 0;
+  document.getElementById("winRows").innerHTML =
+    "POWER BONUS <b style='color:#3fd0a8'>+" + Math.round(power) * 10 + "</b><br>" +
+    "CRYSTALS <b style='color:#ffd76a'>+" + crystalsGot * 100 + "</b><br>" +
+    "TIME " + mm + ":" + (ss < 10 ? "0" : "") + ss + " <b style='color:#e88a6a'>-" + Math.floor(playTime * 2) + "</b><br>" +
+    "<span class='tot'>" + lastScore + "</span><br>BEST " + best;
+  document.getElementById("nextBtn").style.display = level < 12 ? "inline-block" : "none";
+  showPanel("win");
+  sWin();
+  cgEvent("stop");
+  cgEvent("happy");
+}
+function quitToMenu() {
+  if (state === "play") cgEvent("stop");
+  state = "menu";
+  showPanel("menu");
+  if (riverGain) riverGain.gain.value = 0;
+}
+
+// ================= HUD =================
+var hudEcho = document.getElementById("echoFill"),
+    hudPower = document.getElementById("powerFill"),
+    hudCry = document.getElementById("cryV"),
+    hudTime = document.getElementById("timeV"),
+    hudPowerBox = hudPower;
+function updateHud() {
+  var f;
+  if (pingHeld && chargeT > 0.08) f = Math.min(1, chargeT / CHARGE_TIME);
+  else f = 1 - Math.max(0, cooldown) / PING_CD;
+  hudEcho.style.width = Math.round(f * 100) + "%";
+  hudEcho.style.background = pingHeld && chargeT > 0.08 ? "#ffd76a" : "#37c8e8";
+  hudPower.style.width = Math.round(power) + "%";
+  hudPower.className = power < 20 ? "low" : "";
+  hudCry.textContent = crystalsGot + "/3";
+  var mm = Math.floor(playTime / 60), ss = Math.floor(playTime % 60);
+  hudTime.textContent = mm + ":" + (ss < 10 ? "0" : "") + ss;
+}
+
+// ================= 渲染 =================
+function render() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, cw, ch);
+  if (!curMap) { drawMenuBg(); return; }
+  ctx.save();
+  ctx.scale(cam.s, cam.s);
+  ctx.translate(-cam.x, -cam.y);
+
+  var vw = cw / cam.s, vh = ch / cam.s;
+  var vx0 = cam.x - 40, vy0 = cam.y - 40, vx1 = cam.x + vw + 40, vy1 = cam.y + vh + 40;
+
+  // 回波残影（发光线段渐隐）
+  for (var i = 0; i < echoSegs.length; i++) {
+    var s = echoSegs[i];
+    if (s.x1 < vx0 && s.x2 < vx0 || s.x1 > vx1 && s.x2 > vx1 || s.y1 < vy0 && s.y2 < vy0 || s.y1 > vy1 && s.y2 > vy1) continue;
+    var al = s.a * (s.life / s.max);
+    if (al <= 0.01) continue;
+    ctx.strokeStyle = "rgba(" + s.r + "," + s.g + "," + s.b + "," + al.toFixed(3) + ")";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "rgba(" + s.r + "," + s.g + "," + s.b + ",0.8)";
+    ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+
+  // 水晶合唱光柱
+  for (var c = 0; c < crystalPulses.length; c++) {
+    var cp = crystalPulses[c];
+    if (cp.t < 0) continue;
+    var a = cp.life / cp.max;
+    var grd = ctx.createLinearGradient(cp.x, cp.y - 96, cp.x, cp.y + 10);
+    grd.addColorStop(0, "rgba(255,208,90,0)");
+    grd.addColorStop(1, "rgba(255,208,90," + (0.4 * a).toFixed(3) + ")");
+    ctx.fillStyle = grd;
+    ctx.fillRect(cp.x - 7, cp.y - 96, 14, 106);
+    drawCrystal(cp.x, cp.y, a, 10 + (cp.strong ? 2 : 0));
+  }
+  // 出口门
+  drawGate();
+  // ping 扩散圆环
+  for (var p = 0; p < pings.length; p++) {
+    var pg = pings[p];
+    var a2 = Math.max(0, 1 - pg.r / pg.R) * 0.55;
+    ctx.strokeStyle = "rgba(110,225,255," + a2.toFixed(3) + ")";
+    ctx.lineWidth = pg.strong ? 3 : 2;
+    ctx.beginPath(); ctx.arc(pg.x, pg.y, pg.r, 0, Math.PI * 2); ctx.stroke();
+    if (pg.r > 16) {
+      ctx.strokeStyle = "rgba(110,225,255," + (a2 * 0.35).toFixed(3) + ")";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(pg.x, pg.y, pg.r - 12, 0, Math.PI * 2); ctx.stroke();
+    }
+    // 蓄力光环
+    if (pingHeld && chargeT > 0.08) {
+      var cf = Math.min(1, chargeT / CHARGE_TIME);
+      ctx.strokeStyle = "rgba(255,208,90,0.85)";
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(player.x, player.y, 20 + cf * 14, -Math.PI / 2, -Math.PI / 2 + cf * Math.PI * 2); ctx.stroke();
+    }
+  }
+  // 蝙蝠（红色扰动）
+  for (var b = 0; b < bats.length; b++) {
+    var bt = bats[b];
+    if (bt.state === "roost") continue;
+    drawBat(bt);
+  }
+  // 玩家微光
+  var pl = invuln > 0 && Math.floor(invuln * 10) % 2 === 0 ? 0.35 : 1;
+  var rg = ctx.createRadialGradient(player.x, player.y, 2, player.x, player.y, 46);
+  rg.addColorStop(0, "rgba(150,215,255," + (0.16 * pl).toFixed(3) + ")");
+  rg.addColorStop(1, "rgba(150,215,255,0)");
+  ctx.fillStyle = rg;
+  ctx.beginPath(); ctx.arc(player.x, player.y, 46, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(225,242,255," + (0.95 * pl).toFixed(3) + ")";
+  ctx.beginPath(); ctx.arc(player.x, player.y, 3.5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+
+  // 重生黑幕
+  if (respawnT > 0) {
+    var fa = respawnT > 0.42 ? (0.85 - respawnT) / 0.43 : respawnT / 0.42;
+    ctx.fillStyle = "rgba(0,0,0," + Math.max(0, Math.min(0.92, fa)).toFixed(3) + ")";
+    ctx.fillRect(0, 0, cw, ch);
+  }
+  if (isTouch && state === "play") drawTouchUi();
+}
+function drawCrystal(x, y, a, size) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.shadowColor = "rgba(255,208,90,0.9)"; ctx.shadowBlur = 12;
+  ctx.fillStyle = "rgba(255,214,110," + Math.min(1, a * 1.4).toFixed(3) + ")";
+  ctx.beginPath();
+  ctx.moveTo(0, -size); ctx.lineTo(size * 0.62, 0); ctx.lineTo(0, size); ctx.lineTo(-size * 0.62, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.shadowBlur = 0;
+}
+function drawGate() {
+  if (!gateSeen && !gateOpen) return;
+  var x = gatePos.x, y = gatePos.y;
+  if (gateOpen) {
+    var pu = 0.6 + 0.4 * Math.sin(playTime * 3);
+    var rg = ctx.createRadialGradient(x, y, 2, x, y, 40);
+    rg.addColorStop(0, "rgba(110,175,255," + (0.5 * pu).toFixed(3) + ")");
+    rg.addColorStop(1, "rgba(110,175,255,0)");
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+    // 上升光点
+    for (var i = 0; i < 3; i++) {
+      var tt = (playTime * 0.7 + i * 0.33) % 1;
+      ctx.fillStyle = "rgba(150,200,255," + (0.5 * (1 - tt)).toFixed(3) + ")";
+      ctx.fillRect(x - 8 + i * 8, y + 10 - tt * 26, 2, 2);
+    }
+  }
+  ctx.strokeStyle = gateOpen ? "rgba(130,190,255,0.95)" : "rgba(90,140,200,0.5)";
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = "rgba(110,175,255,0.9)"; ctx.shadowBlur = gateOpen ? 12 : 5;
+  ctx.beginPath();
+  ctx.moveTo(x - 10, y + 12); ctx.lineTo(x - 10, y - 4);
+  ctx.arc(x, y - 4, 10, Math.PI, 0, false);
+  ctx.lineTo(x + 10, y + 12);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+function drawBat(b) {
+  var fl = Math.sin(playTime * 22 + b.ph) * 5;
+  ctx.strokeStyle = "rgba(255,84,100,0.85)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(b.x - 8, b.y - 2 + fl); ctx.quadraticCurveTo(b.x - 4, b.y - 6, b.x, b.y);
+  ctx.quadraticCurveTo(b.x + 4, b.y - 6, b.x + 8, b.y - 2 + fl);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,84,100,0.9)";
+  ctx.beginPath(); ctx.arc(b.x, b.y, 2.2, 0, Math.PI * 2); ctx.fill();
+  // 追击扰动纹
+  if (b.state === "chase") {
+    var t = (playTime * 1.6) % 1;
+    ctx.strokeStyle = "rgba(255,84,100," + (0.3 * (1 - t)).toFixed(3) + ")";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(b.x, b.y, 8 + t * 20, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+function drawMenuBg() {
+  // 菜单背景：缓慢扩散的声呐环
+  var t = (Date.now() / 1000) % 4;
+  var a = 0.14 * (1 - t / 4);
+  ctx.strokeStyle = "rgba(110,225,255," + a.toFixed(3) + ")";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cw / 2, ch / 2, 30 + t * (Math.max(cw, ch) / 2), 0, Math.PI * 2); ctx.stroke();
+}
+function drawTouchUi() {
+  if (joy.active) {
+    ctx.strokeStyle = "rgba(200,235,255,0.3)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(joy.bx, joy.by, 44, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "rgba(140,220,255,0.5)";
+    ctx.beginPath(); ctx.arc(joy.kx, joy.ky, 17, 0, Math.PI * 2); ctx.fill();
+  }
+  // ping 按钮
+  var bx = cw - 64, by = ch - 64;
+  ctx.strokeStyle = "rgba(110,225,255,0.7)";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(bx, by, 34, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = "rgba(40,120,150,0.35)";
+  ctx.beginPath(); ctx.arc(bx, by, 34, 0, Math.PI * 2); ctx.fill();
+  if (pingHeld && chargeT > 0.08) {
+    var cf = Math.min(1, chargeT / CHARGE_TIME);
+    ctx.strokeStyle = "rgba(255,208,90,0.95)";
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(bx, by, 34, -Math.PI / 2, -Math.PI / 2 + cf * Math.PI * 2); ctx.stroke();
+  } else if (cooldown > 0) {
+    var f = 1 - cooldown / PING_CD;
+    ctx.strokeStyle = "rgba(110,225,255,0.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(bx, by, 34, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(200,240,255,0.85)";
+  ctx.font = "700 11px sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("PING", bx, by + 1);
+}
+
+// ================= 主循环 =================
+var lastT = 0;
+function frame(t) {
+  var dt = Math.min((t - lastT) / 1000, 0.05);
+  lastT = t;
+  if (state === "play") update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ================= 输入 =================
+document.addEventListener("keydown", function (e) {
+  audioInit();
+  var k = e.key;
+  if (k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown" || k === " ") e.preventDefault();
+  keys[k] = true;
+  if (state === "play") {
+    if (k === "e" || k === "E" || k === " ") { if (!e.repeat) pressPing(); }
+    if (k === "Escape") quitToMenu();
+  } else if (state === "win" && (k === "Enter" || k === " ")) { if (level < 12) startLevel(level + 1); else quitToMenu(); }
+});
+document.addEventListener("keyup", function (e) {
+  keys[e.key] = false;
+  if (e.key === "e" || e.key === "E" || e.key === " ") releasePing();
+});
+function canvasPos(clientX, clientY) {
+  var r = canvas.getBoundingClientRect();
+  return [clientX - r.left, clientY - r.top];
+}
+canvas.addEventListener("mousedown", function (e) {
+  audioInit();
+  if (state !== "play") return;
+  pressPing();
+});
+canvas.addEventListener("mouseup", function () { releasePing(); });
+canvas.addEventListener("touchstart", function (e) {
+  e.preventDefault();
+  audioInit();
+  if (state !== "play") return;
+  for (var i = 0; i < e.changedTouches.length; i++) {
+    var t = e.changedTouches[i];
+    var p = canvasPos(t.clientX, t.clientY);
+    if (p[0] < cw * 0.45) {
+      if (!joy.active) { joy.active = true; joy.id = t.identifier; joy.bx = joy.kx = p[0]; joy.by = joy.ky = p[1]; }
+    } else if (pingTouchId < 0) {
+      pingTouchId = t.identifier;
+      pressPing();
+    }
+  }
+}, { passive: false });
+canvas.addEventListener("touchmove", function (e) {
+  e.preventDefault();
+  for (var i = 0; i < e.changedTouches.length; i++) {
+    var t = e.changedTouches[i];
+    if (joy.active && t.identifier === joy.id) {
+      var p = canvasPos(t.clientX, t.clientY);
+      var dx = p[0] - joy.bx, dy = p[1] - joy.by;
+      var d = Math.hypot(dx, dy), m = 44;
+      if (d > m) { dx = dx / d * m; dy = dy / d * m; }
+      joy.kx = joy.bx + dx; joy.ky = joy.by + dy;
+      inX = dx / m; inY = dy / m;
+    }
+  }
+}, { passive: false });
+function touchEnd(e) {
+  e.preventDefault();
+  for (var i = 0; i < e.changedTouches.length; i++) {
+    var t = e.changedTouches[i];
+    if (joy.active && t.identifier === joy.id) { joy.active = false; joy.id = -1; inX = 0; inY = 0; }
+    if (t.identifier === pingTouchId) { pingTouchId = -1; releasePing(); }
+  }
+}
+canvas.addEventListener("touchend", touchEnd, { passive: false });
+canvas.addEventListener("touchcancel", touchEnd, { passive: false });
+canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden && state === "play") { cgEvent("stop"); pausedByHide = true; }
+  else if (!document.hidden && pausedByHide) { cgEvent("start"); pausedByHide = false; }
+});
+var pausedByHide = false;
+
+// ================= 平台埋点（域名守卫，仅 crazygames 生效） =================
+function cgEvent(kind) {
+  try {
+    if (window.__portal !== "crazygames" || !window.CrazyGames || !window.CrazyGames.SDK) return;
+    if (kind === "start") window.CrazyGames.SDK.game.gameplayStart();
+    else if (kind === "stop") window.CrazyGames.SDK.game.gameplayStop();
+    else if (kind === "happy") window.CrazyGames.SDK.game.happytime();
+  } catch (e) {}
+}
+
+// ================= 界面流转 =================
+var overlay = document.getElementById("overlay");
+var menuPanel = document.getElementById("menuPanel"),
+    levelsPanel = document.getElementById("levelsPanel"),
+    winPanel = document.getElementById("winPanel");
+function showPanel(name) {
+  overlay.classList.toggle("hidden", !name);
+  menuPanel.style.display = name === "menu" ? "block" : "none";
+  levelsPanel.style.display = name === "levels" ? "block" : "none";
+  winPanel.style.display = name === "win" ? "block" : "none";
+  if (name === "levels") buildLevelGrid();
+}
+function bestOf(n) { return parseInt(lsGet("ec_best_" + n) || "0", 10) || 0; }
+function buildLevelGrid() {
+  var g = document.getElementById("lvGrid");
+  g.innerHTML = "";
+  for (var i = 1; i <= 12; i++) {
+    (function (n) {
+      var b = document.createElement("button");
+      b.innerHTML = n + "<small>" + (bestOf(n) > 0 ? bestOf(n) : "·") + "</small>";
+      b.addEventListener("click", function () { audioInit(); sUi(); startLevel(n); });
+      g.appendChild(b);
+    })(i);
+  }
+}
+document.getElementById("playBtn").addEventListener("click", function () { audioInit(); sUi(); showPanel("levels"); });
+document.getElementById("backBtn").addEventListener("click", function () { sUi(); showPanel("menu"); });
+document.getElementById("menuBtn").addEventListener("click", function () { audioInit(); sUi(); if (state === "play") quitToMenu(); else showPanel("menu"); });
+document.getElementById("sndBtn").addEventListener("click", function () {
+  audioInit();
+  muted = !muted;
+  lsSet("ec_muted", muted ? "1" : "0");
+  applyMute();
+});
+document.getElementById("nextBtn").addEventListener("click", function () { sUi(); if (level < 12) startLevel(level + 1); });
+document.getElementById("replayBtn").addEventListener("click", function () { sUi(); startLevel(level); });
+document.getElementById("lvlsBtn").addEventListener("click", function () { sUi(); showPanel("levels"); });
+applyMute();
+showPanel("menu");
+
+// ================= 调试/测试钩子（不影响游戏逻辑） =================
+window.__EC = {
+  get state() { return state; }, get level() { return level; },
+  get px() { return player.x; }, get py() { return player.y; },
+  get power() { return power; }, get crystals() { return crystalsGot; },
+  get gateOpen() { return gateOpen; }, get gateSeen() { return gateSeen; },
+  get time() { return playTime; }, get echoes() { return echoSegs.length; },
+  get falls() { return fallCount; }, get score() { return lastScore; },
+  get respawnT() { return respawnT; }, get cooldown() { return cooldown; },
+  get chargeT() { return chargeT; }, get pingHeld() { return pingHeld; },
+  get bats() { return bats; }, get crystalsList() { return crystals; },
+  get gate() { return gatePos; }, get checkpoint() { return checkpoint; },
+  get calmT() { return calmT; }, get invuln() { return invuln; },
+  MAPS: LEVEL_MAPS, NAMES: LEVEL_NAMES,
+  SOLID: "#S", HAZARD: "RV",
+  startLevel: startLevel, tick: update, render: render,
+  setInput: function (x, y) { inX = x; inY = y; },
+  press: pressPing, release: releasePing,
+  tryFire: tryFire, teleport: function (x, y) { player.x = x; player.y = y; },
+  setPower: function (v) { power = v; },
+  cellCh: cellCh, rayDist: rayDist, losClear: losClear, slideMove: slideMove,
+  computeReveals: function (x, y, R, strong) { var l = []; computeReveals(x, y, R, strong, l); l.sort(function (a, b) { return a.d - b.d; }); return l; },
+  alertBatsInRange: alertBatsInRange
+};
+</script>
+</body>
+</html>
